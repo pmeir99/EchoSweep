@@ -1,0 +1,28 @@
+name: Build Apple Silicon
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install chromaprint dylibbundler
+      - name: Compile and package
+        run: |
+          set -euo pipefail
+          APP="$PWD/dist/EchoSweep.app"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/bin" "$APP/Contents/Frameworks"
+          cp Info.plist "$APP/Contents/Info.plist"
+          xcrun swiftc -O -target arm64-apple-macos15.0 Sources/main.swift -o "$APP/Contents/MacOS/EchoSweep"
+          cp "$(brew --prefix chromaprint)/bin/fpcalc" "$APP/Contents/Resources/bin/fpcalc"
+          dylibbundler -od -b -x "$APP/Contents/Resources/bin/fpcalc" -d "$APP/Contents/Frameworks" -p @executable_path/../../Frameworks
+          codesign --force --deep --sign - "$APP"
+          cd dist && ditto -c -k --keepParent EchoSweep.app EchoSweep-arm64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EchoSweep-arm64
+          path: dist/EchoSweep-arm64.zip
