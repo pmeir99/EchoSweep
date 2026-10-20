@@ -8,10 +8,11 @@ permissions:
 jobs:
   build:
     runs-on: macos-15
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      - name: Install fingerprint tooling
-        run: brew install chromaprint dylibbundler
+      - name: Install Chromaprint
+        run: brew install chromaprint
       - name: Compile and package
         run: |
           set -euo pipefail
@@ -20,8 +21,11 @@ jobs:
           cp Info.plist "$APP/Contents/Info.plist"
           xcrun swiftc -parse-as-library -O -target arm64-apple-macos15.0 Sources/main.swift -o "$APP/Contents/MacOS/EchoSweep"
           cp "$(brew --prefix chromaprint)/bin/fpcalc" "$APP/Contents/Resources/bin/fpcalc"
-          dylibbundler -od -b -x "$APP/Contents/Resources/bin/fpcalc" -d "$APP/Contents/Frameworks" -p @executable_path/../../Frameworks
-          codesign --force --deep --sign - "$APP"
+          python3 scripts/bundle_dylibs.py "$APP/Contents/Resources/bin/fpcalc" "$APP/Contents/Frameworks"
+          find "$APP/Contents/Frameworks" -type f -exec codesign --force --sign - {} \;
+          codesign --force --sign - "$APP/Contents/Resources/bin/fpcalc"
+          codesign --force --sign - "$APP/Contents/MacOS/EchoSweep"
+          codesign --force --sign - "$APP"
           cd dist && ditto -c -k --keepParent EchoSweep.app EchoSweep-arm64.zip
       - uses: actions/upload-artifact@v4
         with:
