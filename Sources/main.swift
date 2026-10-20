@@ -56,7 +56,7 @@ struct Track: Identifiable {
    for url in files {
     if cancelled.isCancelled { break }
     queue.addOperation {
-     if cancelled?.isCancelled == true { return }
+     if cancelled.isCancelled { return }
      let fingerprint = Fingerprint.get(url)
      let size = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
      lock.lock()
