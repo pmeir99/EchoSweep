@@ -28,6 +28,7 @@ struct Track: Identifiable {
   guard !scanning else { return }
   cancelFlag.reset(); scanning = true; discovering = true
   count = 0; total = 0; failed = 0; elapsed = 0; currentFile = ""; groups = []; selected = []
+  let flag = cancelFlag
   worker = Task.detached(priority: .userInitiated) { [weak self] in
    let access = root.startAccessingSecurityScopedResource()
    defer { if access { root.stopAccessingSecurityScopedResource() } }
@@ -35,11 +36,11 @@ struct Track: Identifiable {
    var files: [URL] = []
    let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles])
    while let url = enumerator?.nextObject() as? URL {
-    if self?.cancelFlag.isCancelled == true { break }
+    if flag.isCancelled { break }
     if extensions.contains(url.pathExtension.lowercased()) { files.append(url) }
    }
    await MainActor.run { self?.total = files.count; self?.discovering = false }
-   guard self?.cancelFlag.isCancelled != true else { await MainActor.run { self?.scanning = false }; return }
+   guard !flag.isCancelled else { await MainActor.run { self?.scanning = false }; return }
    let started = Date()
    let lock = NSLock()
    var matches: [String: [Track]] = [:]
@@ -51,9 +52,9 @@ struct Track: Identifiable {
    // Parallel decode helps internal SSDs; a low cap avoids saturating USB/SD readers.
    let cpu = ProcessInfo.processInfo.activeProcessorCount
    queue.maxConcurrentOperationCount = root.path.hasPrefix("/Volumes/") ? min(3, max(1,cpu / 2)) : min(6,max(2,cpu - 2))
-   let cancelled = self?.cancelFlag
+   let cancelled = flag
    for url in files {
-    if cancelled?.isCancelled == true { break }
+    if cancelled.isCancelled { break }
     queue.addOperation {
      if cancelled?.isCancelled == true { return }
      let fingerprint = Fingerprint.get(url)
